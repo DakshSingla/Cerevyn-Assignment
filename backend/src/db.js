@@ -205,6 +205,21 @@ const migrations = [
         WHERE cart_id IS NULL
       `).run();
     }
+  },
+  {
+    version: 3,
+    sql: `
+      CREATE TABLE handoff_status_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        handoff_id INTEGER NOT NULL REFERENCES handoffs(id) ON DELETE CASCADE,
+        previous_status TEXT NOT NULL,
+        new_status TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX handoff_status_events_handoff_idx
+        ON handoff_status_events(handoff_id, created_at);
+    `
   }
 ];
 

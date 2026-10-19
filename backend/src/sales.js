@@ -623,18 +623,97 @@ export function getConversation(senderId) {
     messageId: message.message_id,
     incoming: message.text,
     reply: JSON.parse(message.response_json).reply,
+    type: JSON.parse(message.response_json).type,
     timestamp: message.event_timestamp
   }));
   const context = JSON.parse(conversation.context_json);
+  const cartSummary = createPreview(conversation.id);
   return {
     senderId: conversation.sender_id,
     state: conversation.state,
     updatedAt: conversation.updated_at,
     cart: getCart(conversation.id),
+    cartSummary: cartSummary.error ? null : cartSummary,
     pendingAction: conversation.pending_action,
     preview: context.pending_preview || null,
     messages: recentMessages
   };
+}
+
+export function listConversations(search = "", limit = 100) {
+  const term = `%${search}%`;
+  return db.prepare(`
+    SELECT c.sender_id, c.state, c.pending_action, c.updated_at,
+      (SELECT text FROM messages WHERE conversation_id = c.id ORDER BY rowid DESC LIMIT 1) AS last_message,
+      (SELECT event_timestamp FROM messages WHERE conversation_id = c.id ORDER BY rowid DESC LIMIT 1) AS last_message_at,
+      (SELECT COUNT(*) FROM cart_items WHERE conversation_id = c.id) AS cart_item_count
+    FROM conversations c
+    WHERE c.sender_id LIKE ?
+    ORDER BY COALESCE(last_message_at, c.updated_at) DESC, c.id DESC
+    LIMIT ?
+  `).all(term, limit);
+}
+
+export function getOverview() {
+  const counts = {
+    totalConversations: db.prepare("SELECT COUNT(*) AS count FROM conversations").get().count,
+    confirmedQuotations: db.prepare("SELECT COUNT(*) AS count FROM quotations").get().count,
+    pendingConfirmations: db.prepare("SELECT COUNT(*) AS count FROM conversations WHERE pending_action = 'confirm_quotation'").get().count,
+    openHandoffs: db.prepare("SELECT COUNT(*) AS count FROM handoffs WHERE status = 'open'").get().count
+  };
+  return {
+    counts,
+    recentConversations: listConversations("", 6),
+    recentQuotations: listQuotations(undefined, 1, 6),
+    recentHandoffs: listHandoffs().slice(0, 6),
+    recentActivity: listActivity("", 8)
+  };
+}
+
+const activityDescriptions = {
+  item_added: "Products added to the customer cart",
+  quantity_updated: "Cart quantity updated",
+  item_removed: "Product removed from the customer cart",
+  cart: "Customer reviewed the cart",
+  cart_cleared: "Customer cart cleared",
+  quotation_preview: "Quotation preview prepared for customer review",
+  quotation_confirmed: "Quotation confirmed and saved",
+  cancelled: "Pending cart or quotation preview cancelled",
+  stock_query: "Catalogue stock checked",
+  stock_unavailable: "Stock validation needs customer attention",
+  stock_changed: "Stock changed after quotation preview",
+  reconfirmation_required: "Updated quotation preview needs confirmation",
+  handoff: "Request added to the human handoff queue",
+  clarification: "Assistant requested more information",
+  unknown: "Message could not be matched to a supported sales request",
+  catalogue: "Customer requested the product catalogue"
+};
+
+export function listActivity(search = "", limit = 100) {
+  const term = `%${search}%`;
+  const rows = db.prepare(`
+    SELECT message_id, sender_id, text, event_timestamp, response_json, created_at
+    FROM messages
+    WHERE sender_id LIKE ? OR text LIKE ?
+    ORDER BY rowid DESC
+    LIMIT ?
+  `).all(term, term, limit);
+
+  return rows.map((row) => {
+    const response = JSON.parse(row.response_json);
+    return {
+      id: row.message_id,
+      messageId: row.message_id,
+      senderId: row.sender_id,
+      timestamp: row.event_timestamp || row.created_at,
+      type: response.type || "unknown",
+      description: activityDescriptions[response.type] || "Customer message processed",
+      message: row.text,
+      result: response.reply,
+      quotationId: response.quotationId || null,
+      handoffId: response.handoff_id || null
+    };
+  });
 }
 
 function quotationWithItems(quote) {
@@ -660,17 +739,38 @@ export function listHandoffs(status) {
   const rows = status
     ? db.prepare("SELECT * FROM handoffs WHERE status = ? ORDER BY created_at DESC").all(status)
     : db.prepare("SELECT * FROM handoffs ORDER BY created_at DESC").all();
-  return rows.map((row) => ({ ...row, context: JSON.parse(row.context_json) }));
+  const history = db.prepare(`
+    SELECT previous_status, new_status, actor, created_at
+    FROM handoff_status_events WHERE handoff_id = ? ORDER BY created_at, id
+  `);
+  return rows.map((row) => ({
+    ...row,
+    context: JSON.parse(row.context_json),
+    history: history.all(row.id)
+  }));
 }
 
 export function updateHandoffStatus(id, status) {
-  const result = db.prepare(`
-    UPDATE handoffs SET status = ?,
-      assigned_to = CASE WHEN ? = 'in_progress' THEN COALESCE(assigned_to, 'local-demo-operator') ELSE assigned_to END,
-      resolved_at = CASE WHEN ? = 'resolved' THEN CURRENT_TIMESTAMP ELSE NULL END
-    WHERE id = ?
-  `).run(status, status, status, id);
-  if (!result.changes) return null;
-  const row = db.prepare("SELECT * FROM handoffs WHERE id = ?").get(id);
-  return { ...row, context: JSON.parse(row.context_json) };
+  return db.transaction(() => {
+    const previous = db.prepare("SELECT status FROM handoffs WHERE id = ?").get(id);
+    if (!previous) return null;
+    if (previous.status !== status) {
+      db.prepare(`
+        UPDATE handoffs SET status = ?,
+          assigned_to = CASE WHEN ? = 'in_progress' THEN COALESCE(assigned_to, 'local-demo-operator') ELSE assigned_to END,
+          resolved_at = CASE WHEN ? = 'resolved' THEN CURRENT_TIMESTAMP ELSE NULL END
+        WHERE id = ?
+      `).run(status, status, status, id);
+      db.prepare(`
+        INSERT INTO handoff_status_events(handoff_id, previous_status, new_status, actor)
+        VALUES (?, ?, ?, 'local-demo-operator')
+      `).run(id, previous.status, status);
+    }
+    const row = db.prepare("SELECT * FROM handoffs WHERE id = ?").get(id);
+    const history = db.prepare(`
+      SELECT previous_status, new_status, actor, created_at
+      FROM handoff_status_events WHERE handoff_id = ? ORDER BY created_at, id
+    `).all(id);
+    return { ...row, context: JSON.parse(row.context_json), history };
+  })();
 }

@@ -5,8 +5,8 @@ import pino from "pino";
 import pinoHttp from "pino-http";
 import { z } from "zod";
 import {
-  getConversation, getProduct, getQuotation, IdempotencyConflictError, listHandoffs, listProducts,
-  listQuotations, processMessage, updateHandoffStatus
+  getConversation, getOverview, getProduct, getQuotation, IdempotencyConflictError, listActivity,
+  listConversations, listHandoffs, listProducts, listQuotations, processMessage, updateHandoffStatus
 } from "./sales.js";
 import { config } from "./config.js";
 import { db } from "./db.js";
@@ -47,10 +47,15 @@ app.get("/api/health", (_req, res) => {
     return res.status(503).json({ success: false, status: "unavailable", database: "unavailable" });
   }
 });
+app.get("/api/overview", (_req, res) => res.json({ overview: getOverview() }));
 app.get("/api/products", (_req, res) => res.json({ products: listProducts() }));
 app.get("/api/products/:id", (req, res) => {
   const product = getProduct(req.params.id);
   return product ? res.json({ product }) : res.status(404).json({ success: false, error: { code: "PRODUCT_NOT_FOUND", message: "Product not found." } });
+});
+app.get("/api/conversations", (req, res) => {
+  const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 200) : "";
+  return res.json({ conversations: listConversations(search) });
 });
 app.get("/api/conversations/:senderId", (req, res) => {
   const conversation = getConversation(req.params.senderId);
@@ -59,7 +64,7 @@ app.get("/api/conversations/:senderId", (req, res) => {
 app.get("/api/conversations/:senderId/cart", (req, res) => {
   const conversation = getConversation(req.params.senderId);
   if (!conversation) return res.json({ cart: [], preview: null, state: "active" });
-  return res.json({ cart: conversation.cart, preview: conversation.preview, state: conversation.state });
+  return res.json({ cart: conversation.cart, cartSummary: conversation.cartSummary, preview: conversation.preview, state: conversation.state });
 });
 app.post("/api/conversations/:senderId/reset", (req, res) => {
   if (Object.keys(req.body || {}).length) return res.status(400).json({ success: false, error: { code: "INVALID_BODY", message: "Reset does not accept a request body." } });
@@ -101,6 +106,14 @@ app.get("/api/quotations", (req, res) => {
 app.get("/api/quotations/:id", (req, res) => {
   const quotation = getQuotation(req.params.id);
   return quotation ? res.json({ quotation }) : res.status(404).json({ success: false, error: { code: "QUOTATION_NOT_FOUND", message: "Quotation not found." } });
+});
+app.get("/api/activity", (req, res) => {
+  const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 200) : "";
+  const limit = Number(req.query.limit || 100);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+    return res.status(400).json({ success: false, error: { code: "INVALID_LIMIT", message: "Limit must be between 1 and 200." } });
+  }
+  return res.json({ activity: listActivity(search, limit) });
 });
 app.get("/api/handoffs", (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;

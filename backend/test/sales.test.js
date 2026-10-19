@@ -187,7 +187,10 @@ test("creates a contextual local handoff without claiming an employee was contac
   assert.equal(requests.length, 1);
   assert.equal(requests[0].context.cart[0].quantity, 2);
   assert.ok(requests[0].context.recentMessages.some((message) => /custom bulk discount/.test(message.text)));
-  assert.equal(sales.updateHandoffStatus(response.handoffId, "in_progress").status, "in_progress");
+  const updated = sales.updateHandoffStatus(response.handoffId, "in_progress");
+  assert.equal(updated.status, "in_progress");
+  assert.deepEqual(updated.history.map(({ previous_status, new_status }) => [previous_status, new_status]), [["open", "in_progress"]]);
+  assert.equal(sales.updateHandoffStatus(response.handoffId, "in_progress").history.length, 1);
 });
 
 test("rolls back the quotation when a quotation-item insert fails", () => {
@@ -251,6 +254,44 @@ test("validates webhook timestamps and returns seeded catalogue through the API"
       body: JSON.stringify({ ...event, text: "2 mouse" })
     });
     assert.equal(conflict.status, 409);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test("serves real overview, conversation inbox, and persisted activity records", async () => {
+  send("overview-buyer", "overview-1", "I need a keyboard.");
+  send("overview-buyer", "overview-2", "3");
+  send("overview-buyer", "overview-3", "quote");
+  send("overview-handoff", "overview-4", "Can I get a custom bulk discount?");
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const [overviewResponse, conversationsResponse, activityResponse] = await Promise.all([
+      fetch(`${base}/api/overview`),
+      fetch(`${base}/api/conversations?search=overview-buyer`),
+      fetch(`${base}/api/activity?search=overview-buyer&limit=10`)
+    ]);
+    assert.equal(overviewResponse.status, 200);
+    assert.equal(conversationsResponse.status, 200);
+    assert.equal(activityResponse.status, 200);
+
+    const { overview } = await overviewResponse.json();
+    assert.equal(overview.counts.totalConversations, 2);
+    assert.equal(overview.counts.pendingConfirmations, 1);
+    assert.equal(overview.counts.openHandoffs, 1);
+    assert.equal(overview.recentConversations.length, 2);
+
+    const { conversations } = await conversationsResponse.json();
+    assert.equal(conversations.length, 1);
+    assert.equal(conversations[0].sender_id, "overview-buyer");
+    assert.equal(conversations[0].pending_action, "confirm_quotation");
+
+    const { activity } = await activityResponse.json();
+    assert.ok(activity.some((event) => event.type === "clarification"));
+    assert.ok(activity.some((event) => event.type === "quotation_preview"));
+    assert.ok(activity.every((event) => event.senderId === "overview-buyer"));
+    assert.equal((await fetch(`${base}/api/activity?limit=201`)).status, 400);
   } finally {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
