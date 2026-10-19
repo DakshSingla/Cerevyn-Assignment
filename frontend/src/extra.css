@@ -1,0 +1,172 @@
+.sender-field select {
+  height: 30px;
+  border: 1px solid #e5eae8;
+  border-radius: 6px;
+  padding: 0 9px;
+  color: #354844;
+  background: #fff;
+  font: inherit;
+}
+
+.message-meta {
+  display: block;
+  margin-top: 5px;
+  color: #81908b;
+  font-size: 9px;
+}
+
+.offline-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #e27868;
+}
+
+.event-tools,
+.preview-actions,
+.cart-total,
+.cart-lines li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.event-tools {
+  margin-top: 10px;
+  color: #76847f;
+  font-size: 9px;
+  flex-wrap: wrap;
+}
+
+.event-tools code {
+  color: #315f50;
+  font-size: 9px;
+}
+
+.cart-lines {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  color: #5f6f69;
+  font-size: 10px;
+}
+
+.cart-lines li {
+  padding: 7px 0;
+  border-bottom: 1px solid #edf0ef;
+}
+
+.cart-lines b,
+.cart-total b {
+  color: #315e50;
+  white-space: nowrap;
+}
+
+.cart-lines small {
+  display: block;
+  margin-top: 3px;
+  color: #84908b;
+  font-size: 9px;
+}
+
+.cart-total {
+  padding: 5px 0;
+  color: #71807a;
+  font-size: 10px;
+}
+
+.cart-total.total {
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid #e8eeeb;
+  color: #253e35;
+  font-size: 12px;
+}
+
+.preview-actions {
+  margin-top: 12px;
+}
+
+.preview-actions button,
+.table-link {
+  border: 0;
+  border-radius: 5px;
+  padding: 7px 9px;
+  background: #15795b;
+  color: white;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.preview-actions .secondary-button {
+  background: #edf3f0;
+  color: #507266;
+}
+
+.preview-actions button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.product-id {
+  display: block;
+  margin-top: 7px;
+  color: #87938f;
+  font-size: 9px;
+}
+
+.product-info h3 {
+  margin-top: 5px;
+}
+
+.stock-ok {
+  color: #328064 !important;
+}
+
+.stock-empty {
+  color: #aa584b !important;
+}
+
+.table-link {
+  padding: 0;
+  background: none;
+  color: #287659;
+  font-weight: 700;
+  text-align: left;
+}
+
+.quote-detail {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #e8eeeb;
+}
+
+.quote-snapshot-total {
+  margin: 14px 0 0;
+  color: #60706a;
+  font-size: 11px;
+  text-align: right;
+}
+
+.context-box p {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #e8eeeb;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .event-tools {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sender-field {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "message_id": "MSG-DEMO-A-001",
+    "sender_id": "CUST-001",
+    "timestamp": "2026-10-19T10:30:00+05:30",
+    "text": "I need 2 keyboards, 3 monitors, and 1 mouse."
+  },
+  {
+    "message_id": "MSG-DEMO-B-001",
+    "sender_id": "CUST-002",
+    "timestamp": "2026-10-19T10:31:00+05:30",
+    "text": "I need a keyboard."
+  },
+  {
+    "message_id": "MSG-DEMO-HANDOFF-001",
+    "sender_id": "CUST-002",
+    "timestamp": "2026-10-19T10:32:00+05:30",
+    "text": "Can I get a custom bulk discount?"
+  }
+]

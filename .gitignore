@@ -1,0 +1,6 @@
+docs/*
+!docs/screenshots/
+docs/screenshots/*
+!docs/screenshots/*.png
+node_modules/
+.env
