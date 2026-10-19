@@ -14,11 +14,13 @@ The screenshots below were captured from the running application using a separat
 
 - [Problem and objectives](#problem-and-objectives)
 - [Technology stack](#technology-stack)
+- [Dependencies](#dependencies)
 - [Implemented features](#implemented-features)
 - [Screenshots and walkthrough](#screenshots-and-walkthrough)
 - [End-to-end workflow](#end-to-end-workflow)
 - [Architecture and data storage](#architecture-and-data-storage)
 - [Installation and local execution](#installation-and-local-execution)
+- [Sample inputs, outputs, and short demonstration](#sample-inputs-outputs-and-short-demonstration)
 - [Demonstration scenarios](#demonstration-scenarios)
 - [Testing evidence](#testing-evidence)
 - [Limitations and future improvements](#limitations-and-future-improvements)
@@ -43,6 +45,18 @@ I built this project to demonstrate how that routine flow can be handled through
 | CI | GitHub Actions workflow runs the backend tests and frontend production build on pushes and pull requests |
 
 There is no external language-model service, WhatsApp API, or API key in the current application.
+
+## Dependencies
+
+There is no root `package.json`. The backend and frontend each have their own `package.json` and lockfile, so dependencies must be installed from each package directory with `npm ci`.
+
+| Package | Main dependencies |
+|---|---|
+| Backend (`backend/package.json`) | `express` for HTTP routes; `better-sqlite3` for persistence; `zod` for request validation; `fuse.js` for fuzzy catalogue matching; `helmet`, `cors`, `pino`, `pino-http`, and `dotenv` for security headers, cross-origin configuration, logging, and environment loading |
+| Frontend (`frontend/package.json`) | `react` and `react-dom` for the interface; `vite` and `@vitejs/plugin-react` for development/build; `lucide-react` for icons |
+| Development/test tools | Node.js 20+ and npm; the built-in `node:test` runner is used, so no separate backend test framework is required |
+
+The exact pinned dependency versions used by `npm ci` are recorded in `backend/package-lock.json` and `frontend/package-lock.json`.
 
 ## Implemented features
 
@@ -269,6 +283,48 @@ Set-Location frontend
 npm run build
 ```
 
+## Sample inputs, outputs, and short demonstration
+
+The frontend's **Conversations** page is a local message simulator. Enter a sender ID to open a customer session, type a message, and select **Send**. The following is a verified example using the seeded catalogue and default 18% tax rate:
+
+```text
+Customer: I need 2 keyboards, 3 monitors, and 1 mouse.
+Assistant: Added 2 × Mechanical Keyboard, 3 × 24-inch Monitor, 1 × Wireless Mouse to your cart.
+```
+
+Then select **Prepare quote preview** (or send `QUOTE`):
+
+```text
+Quotation preview
+24-inch Monitor (P003) × 3 at ₹8,000.00: ₹24,000.00 — 10 available
+Mechanical Keyboard (P002) × 2 at ₹1,200.00: ₹2,400.00 — 30 available
+Wireless Mouse (P001) × 1 at ₹500.00: ₹500.00 — 50 available
+Subtotal: ₹26,900.00
+Tax (18%): ₹4,842.00
+Total: ₹31,742.00
+```
+
+The preview asks the customer to reply `CONFIRM`, or to change the cart first. After confirmation the app returns a generated quotation ID and the same totals; the ID differs for each quotation. The saved record appears under **Quotations**.
+
+Other useful sample inputs:
+
+| Customer input | Expected assistant behaviour |
+|---|---|
+| `I need a keyboard.` | Asks, “How many Mechanical Keyboards would you like?” and waits for a quantity |
+| `three` (after the quantity question) | Adds three Mechanical Keyboards to that sender's cart |
+| `12 monitors` | Reports that only 10 24-inch Monitors are available; does not add the request |
+| `Can I get a custom bulk discount?` | Creates a local human handoff and states that no employee was contacted |
+
+### Short evaluator walkthrough
+
+1. Follow [Installation and local execution](#installation-and-local-execution) to install the packages, seed the catalogue, and start the API and Vite server.
+2. Open the Vite URL shown in the frontend terminal and select **Conversations**.
+3. Enter a demo sender ID such as `EVAL-CUSTOMER-01`; send `I need 2 keyboards, 3 monitors, and 1 mouse.` and then `QUOTE`.
+4. Review the three line items and ₹26,900.00 subtotal, ₹4,842.00 tax, and ₹31,742.00 total. Select **Confirm quotation**.
+5. Open **Quotations** to see the persisted record. Return to **Conversations** and enter a different sender ID to verify that the second customer's session is separate.
+
+These steps create persistent local demo records in the configured SQLite database. To remove a demo cart, use the selected conversation's **Reset cart** control; it preserves message history and confirmed quotations. Do not delete the database file unless you intend to remove all local records.
+
 ### Troubleshooting
 
 - **Dashboard says the API is unavailable:** start the backend and check `http://127.0.0.1:3001/api/health`, then refresh the browser.
@@ -322,15 +378,39 @@ The backend tests cover catalogue data, fuzzy matching, missing and ambiguous in
 
 ## Deployment design
 
-There is **no live deployment**. Azure is a proposal for a possible future deployment:
+There is **no live Azure deployment**. The following is the proposed Azure plan documented for this assessment, not an implemented or provisioned environment:
 
-- Build the Vite frontend and host its static assets with Azure Static Web Apps or another static host.
-- Run the Express backend on Azure App Service or Azure Container Apps behind HTTPS.
-- Provide the frontend API URL at build time and configure the backend's port, bind host, CORS origin, tax rate, and log level in the hosting environment.
-- Keep the current SQLite file on durable storage only for a single-instance demonstration. For a multi-instance production system, migrate to a managed relational database such as Azure Database for PostgreSQL.
-- Use the existing GitHub Actions workflow for test/build checks. Add a separate protected deployment workflow only when Azure resources are configured.
+```mermaid
+flowchart LR
+    U[Browser / future WhatsApp provider] -->|HTTPS| FD[Azure Front Door / optional WAF]
+    FD --> APP[Azure App Service or Container Apps]
+    APP --> DB[Azure Database for PostgreSQL]
+    APP --> KV[Azure Key Vault via managed identity]
+    APP --> MON[Azure Monitor / Application Insights]
+    APP -. optional handoff notifications .-> SB[Azure Service Bus]
+    APP --> HP[Health probe: GET /api/health]
+```
 
-No Azure resources or deployment URL have been created for this project.
+| Component | Proposed role |
+|---|---|
+| Azure Front Door (optional WAF) | HTTPS entry point and optional web application firewall |
+| Azure App Service or Azure Container Apps | Run the Node.js/Express API. Build the React/Vite client and serve its static files from Azure Static Web Apps or a CDN, or configure the service to serve `frontend/dist` |
+| Azure Database for PostgreSQL | Durable relational storage for a multi-instance hosted deployment |
+| Azure Key Vault | Store provider or database secrets if integrations are added; access them through managed identity |
+| Azure Monitor and Application Insights | Collect structured logs, metrics, and traces; configure alerts for API, database, and webhook failures |
+| Azure Service Bus (optional) | Future durable handoff notifications; the current local handoff queue does not publish messages |
+| Health probe | Use `GET /api/health`; readiness should distinguish database connectivity before production |
+
+**Database migration is a prerequisite:** the current backend uses a SQLite-specific `better-sqlite3` adapter. PostgreSQL cannot be enabled by changing an environment variable alone. A hosted PostgreSQL deployment needs a deliberate database adapter and migration rewrite, while preserving event-ID uniqueness, transactional quotation writes, and other data constraints. Do not use an ephemeral local SQLite file as shared state across multiple hosted instances.
+
+**Build and configuration:** install each npm package from its own directory with `npm ci`, build the frontend with `npm run build`, and run controlled, versioned database migrations as a release step. Configure `PORT`, a production `FRONTEND_URL`, and `TAX_RATE_BASIS_POINTS` in the backend hosting environment. Use HTTPS, strict CORS, webhook signature verification, rate limits, and authenticated staff access before connecting a real messaging provider. The current local simulator does not implement those production integrations.
+
+**Monitoring and recovery:** forward structured Pino logs to Azure Monitor/Application Insights, redact personal message content where possible, alert on HTTP 5xx responses, webhook failures, database connectivity, and handoff queue age, and configure managed-database backups with tested point-in-time restore.
+
+**CI/CD:** the existing GitHub Actions workflow only runs tests and builds the frontend; it does not deploy. A separate deployment workflow should run only after CI succeeds and use protected GitHub environment approvals and federated credentials/OIDC rather than long-lived secrets.
+
+Azure compute, databases, Key Vault operations, monitoring ingestion, networking, and messaging may incur charges. Verify current regional pricing, quotas, and free-tier terms before provisioning anything. No Azure resources or deployment URL have been created.
+
 
 ## Conclusion
 
