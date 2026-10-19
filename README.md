@@ -1,6 +1,6 @@
-# PS05: WhatsApp Sales and Quotation Assistant
+# WhatsApp Sales and Quotation Assistant
 
-I built **QuoteFlow** as a WhatsApp-style sales and quotation assistant for PS05. It simulates a customer asking about products, captures the quantity they need, checks a local catalogue and stock, calculates a quotation, and saves it after the customer confirms. It is a local demonstration application; it does not connect to WhatsApp or send messages to real customers.
+I built **QuoteFlow** as a WhatsApp-style sales and quotation assistant to help businesses handle customer product enquiries and prepare quotations faster through a WhatsApp-style conversation.. It simulates a customer asking about products, captures the quantity they need, checks a local catalogue and stock, calculates a quotation, and saves it after the customer confirms. It is a local demonstration application; it does not connect to WhatsApp or send messages to real customers.
 
 ## Preview
 
